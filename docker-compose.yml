@@ -4,9 +4,9 @@ services:
     container_name: irigasi-db
     restart: unless-stopped
     environment:
-      POSTGRES_DB: irigasi_kali_wening
-      POSTGRES_USER: irigasi
-      POSTGRES_PASSWORD: irigasi_dev_password
+      POSTGRES_DB: ${DB_NAME:-irigasi_kali_wening}
+      POSTGRES_USER: ${DB_USER:-irigasi}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-irigasi_dev_password}
     ports:
       - "5434:5432"
     volumes:
@@ -24,11 +24,13 @@ services:
     container_name: irigasi-backend
     restart: unless-stopped
     environment:
-      DB_HOST: db
-      DB_PORT: 5432
-      DB_NAME: irigasi_kali_wening
-      DB_USER: irigasi
-      DB_PASSWORD: irigasi_dev_password
+      DB_HOST: ${DB_HOST:-db}
+      DB_PORT: ${DB_PORT:-5432}
+      DB_NAME: ${DB_NAME:-irigasi_kali_wening}
+      DB_USER: ${DB_USER:-irigasi}
+      DB_PASSWORD: ${DB_PASSWORD:-irigasi_dev_password}
+    volumes:
+      - ./data:/app/data
     depends_on:
       db:
         condition: service_healthy

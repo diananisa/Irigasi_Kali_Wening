@@ -8,6 +8,7 @@ from cleaning import (
     bersihkan_petak
 )
 from geospatial import (
+    deduplikasi_aset,
     deduplikasi_saluran,
     bangun_graph_titik_sambungan,
     tentukan_arus_dari_bendung,
@@ -16,22 +17,46 @@ from geospatial import (
     proses_petak_tersier,
     hubungkan_petak_ke_sadap,
     hitung_dampak_bangunan,
-    hitung_prioritas_rehabilitasi
+    hitung_prioritas_rehabilitasi,
+    deduplikasi_laporan
 )
 
 BASE_DIR = Path(__file__).resolve().parents[2]
-DATA_DIR = BASE_DIR / "data"
+DATA_DIR = Path("/app/data") if Path("/app/data").exists() else BASE_DIR / "data"
 
-
-def muat_data():
+def muat_data(laporan_tambahan=None):
     # 1. Baca data sumber
     aset = bersihkan_aset(str(DATA_DIR / "aset_bangunan.csv"))
     laporan = bersihkan_laporan(str(DATA_DIR / "laporan_penelusuran.xlsx"))    
     saluran = bersihkan_saluran(str(DATA_DIR / "saluran.geojson"))
     petak = bersihkan_petak(str(DATA_DIR / "petak_tersier.geojson"))
 
-    # 2. Deduplikasi saluran
+    if laporan_tambahan:
+        laporan_berdasarkan_id = {
+            item["id_laporan"]: item
+            for item in laporan
+            if item.get("id_laporan")
+        }
+
+        laporan_tanpa_id = [
+            item for item in laporan
+            if not item.get("id_laporan")
+        ]
+
+        for item in laporan_tambahan:
+            kode = item.get("id_laporan")
+
+            if kode:
+                laporan_berdasarkan_id[kode] = item
+            else:
+                laporan_tanpa_id.append(item)
+
+        laporan = list(laporan_berdasarkan_id.values()) + laporan_tanpa_id
+
+    # 2. Deduplikasi aset dan saluran
+    aset, duplikat_aset = deduplikasi_aset(aset)
     saluran, duplikat_saluran = deduplikasi_saluran(saluran)
+    # laporan, duplikat_laporan = deduplikasi_laporan(laporan)
 
     # 3. Bangun jaringan dan tentukan arah aliran
     graph, peta_ujung = bangun_graph_titik_sambungan(saluran)
@@ -54,6 +79,10 @@ def muat_data():
     laporan_terhubung = hubungkan_laporan_ke_aset(
         laporan,
         aset
+    )
+
+    laporan_terhubung, duplikat_laporan = deduplikasi_laporan(
+        laporan_terhubung
     )
 
         # 4b. Tentukan kondisi terbaru berdasarkan laporan aktif
@@ -148,6 +177,10 @@ def muat_data():
         "arah_ruas": arah_ruas,
         "dampak": dampak,
         "prioritas": prioritas,
-        "duplikat_saluran": duplikat_saluran
-        
+
+        # Metadata kualitas data
+        "duplikat_aset": duplikat_aset,
+        "duplikat_saluran": duplikat_saluran,
+        "duplikat_laporan": duplikat_laporan,
+        "kualitas_petak": hasil_petak
     }

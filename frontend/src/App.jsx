@@ -3,9 +3,12 @@ import "./App.css";
 
 import Sidebar from "./components/Sidebar";
 import Navbar from "./components/Navbar";
+
 import Dashboard from "./pages/Dashboard";
 import DataBangunan from "./pages/DataBangunan";
 import PetaJaringan from "./pages/PetaJaringan";
+import PrioritasPemeliharaan from "./pages/PrioritasPemeliharaan";
+import KualitasData from "./pages/KualitasData";
 
 export default function App() {
   const [activePage, setActivePage] = useState("Dashboard");
@@ -14,8 +17,16 @@ export default function App() {
     switch (activePage) {
       case "Peta Jaringan":
         return <PetaJaringan />;
+
       case "Data Bangunan":
         return <DataBangunan />;
+
+      case "Prioritas Pemeliharaan":
+        return <PrioritasPemeliharaan />;
+
+      case "Kualitas Data":
+        return <KualitasData />;
+
       case "Dashboard":
       default:
         return <Dashboard />;

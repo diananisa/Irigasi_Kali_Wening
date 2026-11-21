@@ -97,7 +97,6 @@ export default function DataBangunan() {
       ["Kondisi", labelKondisi[selected.data?.kondisi] || selected.data?.kondisi],
       ["Longitude (X)", formatKoordinat(selected.data?.x)],
       ["Latitude (Y)", formatKoordinat(selected.data?.y)],
-      ["Latitude (Y)", formatKoordinat(selected.data?.y)],
       ["Saluran Terdekat", selected.data?.saluran_terdekat],
       ["ID Ruas", selected.data?.id_ruas_terdekat],
       ["Jarak ke Saluran", selected.data?.jarak_saluran_meter != null ? `${selected.data.jarak_saluran_meter} meter` : "-"],
@@ -463,6 +462,7 @@ export default function DataBangunan() {
             </div>
 
             {/* RIWAYAT */}
+            {/* RIWAYAT PEMERIKSAAN */}
             <div
               style={{
                 background: "#f8fafc",
@@ -478,25 +478,91 @@ export default function DataBangunan() {
                   display: "flex",
                   alignItems: "center",
                   gap: "8px",
-                  margin: "0 0 10px",
+                  margin: "0 0 16px",
                 }}
               >
                 <Activity size={18} />
                 Riwayat Pemeriksaan
               </h3>
 
-              <p
-                style={{
-                  color: "#64748b",
-                  fontSize: "13px",
-                  margin: 0,
-                  lineHeight: 1.6,
-                }}
-              >
-                Data riwayat pemeriksaan belum tersedia. Riwayat akan
-                ditampilkan setelah sistem memiliki catatan pemeriksaan
-                bangunan.
-              </p>
+              {selected.riwayat_laporan?.length > 0 ? (
+                <div style={{ display: "grid", gap: "12px" }}>
+                  {selected.riwayat_laporan.map((laporan) => (
+                    <div
+                      key={laporan.id_laporan}
+                      style={{
+                        background: "#ffffff",
+                        border: "1px solid #e2e8f0",
+                        borderRadius: "9px",
+                        padding: "14px",
+                      }}
+                    >
+                      <div
+                        style={{
+                          display: "flex",
+                          justifyContent: "space-between",
+                          alignItems: "center",
+                          flexWrap: "wrap",
+                          gap: "8px",
+                          marginBottom: "10px",
+                        }}
+                      >
+                        <strong style={{ color: "#1e293b", fontSize: "14px" }}>
+                          {laporan.id_laporan}
+                        </strong>
+
+                        <span
+                          style={{
+                            padding: "4px 9px",
+                            borderRadius: "20px",
+                            fontSize: "12px",
+                            fontWeight: 600,
+                            background:
+                              laporan.status === "aktif" ? "#dcfce7" : "#fee2e2",
+                            color:
+                              laporan.status === "aktif" ? "#166534" : "#991b1b",
+                          }}
+                        >
+                          {laporan.status === "aktif" ? "Aktif" : laporan.status}
+                        </span>
+                      </div>
+
+                      <div style={{ display: "grid", gap: "7px", fontSize: "13px" }}>
+                        <div>
+                          <span style={{ color: "#64748b" }}>Tanggal: </span>
+                          <strong>{laporan.tanggal || "-"}</strong>
+                        </div>
+
+                        <div>
+                          <span style={{ color: "#64748b" }}>Petugas: </span>
+                          <strong>{laporan.petugas || "-"}</strong>
+                        </div>
+
+                        <div>
+                          <span style={{ color: "#64748b" }}>Jenis Kerusakan: </span>
+                          <strong>{laporan.jenis_kerusakan || "-"}</strong>
+                        </div>
+
+                        <div>
+                          <span style={{ color: "#64748b" }}>Kondisi: </span>
+                          <strong>
+                            {labelKondisi[laporan.kondisi] || laporan.kondisi || "-"}
+                          </strong>
+                        </div>
+
+                        <div>
+                          <span style={{ color: "#64748b" }}>Keterangan: </span>
+                          <span>{laporan.keterangan || "-"}</span>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p style={{ color: "#64748b", fontSize: "13px", margin: 0 }}>
+                  Belum tersedia riwayat pemeriksaan untuk bangunan ini.
+                </p>
+              )}
             </div>
 
             {/* FOOTER */}

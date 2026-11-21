@@ -259,7 +259,7 @@ def deteksi_koneksi_ruas(geom_a, geom_b, toleransi=10):
 
     return koneksi
 
-def bangun_graph_saluran(ruas_saluran, toleransi=10):
+def bangun_graph_saluran(ruas_saluran, toleransi=5):
     graph = nx.Graph()
 
     for ruas in ruas_saluran:
@@ -290,7 +290,7 @@ def bangun_graph_saluran(ruas_saluran, toleransi=10):
 
     return graph
 
-def bangun_graph_titik_sambungan(ruas_saluran, toleransi=10):
+def bangun_graph_titik_sambungan(ruas_saluran, toleransi=5):
     """
     Membentuk jaringan berdasarkan titik sambungan fisik
     pada kedua ujung setiap ruas saluran.
@@ -531,7 +531,9 @@ def deduplikasi_saluran(daftar_saluran):
                     "id_ruas": saluran["id_ruas"],
                     "nama_saluran": saluran["nama_saluran"],
                     "duplikat_dari": ruas["id_ruas"],
-                    "alasan": "geometri_identik"
+                    "alasan": "geometri_identik",
+                    "sumber": saluran.get("sumber"),
+                    "fitur_sumber": saluran.get("fitur_sumber")
                 })
 
                 ditemukan = True
@@ -543,7 +545,9 @@ def deduplikasi_saluran(daftar_saluran):
                 "nama_saluran": saluran["nama_saluran"],
                 "tingkat": saluran["tingkat"],
                 "kondisi": saluran["kondisi"],
-                "geometry": geom
+                "geometry": geom,
+                "sumber": saluran.get("sumber"),
+                "fitur_sumber": saluran.get("fitur_sumber")
             })
 
     return ruas_unik, duplikat
@@ -606,6 +610,7 @@ def deduplikasi_aset(daftar_aset):
                 "kode_aset": kode,
                 "jumlah_data": len(daftar),
                 "dipertahankan": daftar_urut[0],
+                "data_duplikat": daftar_urut[1:],
                 "jumlah_dihapus": len(daftar) - 1
             })
 
@@ -699,8 +704,6 @@ def hubungkan_bangunan_ke_saluran(daftar_aset, daftar_saluran, arah_ruas=None):
 
         if terdekat is None:
             status = "saluran_tidak_ditemukan"
-        elif jarak_minimum > 2000:
-            status = "koordinat_tidak_valid"
         elif jarak_minimum > 50:
             status = "jauh_dari_saluran"
         else:
@@ -749,10 +752,28 @@ def hubungkan_bangunan_ke_saluran(daftar_aset, daftar_saluran, arah_ruas=None):
 def proses_petak_tersier(daftar_petak):
     petak_unik, duplikat = deduplikasi_petak(daftar_petak)
 
+    duplikat_detail = []
+
+    for kode in duplikat:
+        for feature in daftar_petak:
+            properties = (
+                feature.get("properties", {})
+                if "properties" in feature
+                else feature
+            )
+
+            if properties.get("kode_petak") == kode:
+                duplikat_detail.append({
+                    "kode_petak": kode,
+                    "sumber": properties.get("sumber"),
+                    "fitur_sumber": properties.get("fitur_sumber")
+                })
+
     hasil = []
     total_luas = 0
     jumlah_anomali = 0
     geometri_gagal = []
+    geometri_gagal_detail = []
 
     for feature in petak_unik:
         if "properties" in feature:
@@ -770,6 +791,12 @@ def proses_petak_tersier(daftar_petak):
 
         if geom is None:
             geometri_gagal.append(kode)
+
+            geometri_gagal_detail.append({
+                "kode_petak": kode,
+                "sumber": properties.get("sumber"),
+                "fitur_sumber": properties.get("fitur_sumber")
+            })
             continue
 
         luas_ha = hitung_luas_petak(geom)
@@ -805,7 +832,9 @@ def proses_petak_tersier(daftar_petak):
 
         hasil.append({
             "kode_petak": kode,
-            "nomenklatur_sadap": normalisasi_teks(properties.get("nomenklatur_sadap")),
+            "nomenklatur_sadap": normalisasi_teks(
+                properties.get("nomenklatur_sadap")
+            ),
             "luas_geometri_ha": round(luas_ha, 2),
             "luas_baku_ha": round(luas_baku, 2)
                 if luas_baku is not None else None,
@@ -815,7 +844,9 @@ def proses_petak_tersier(daftar_petak):
             "anomali": anomali,
             "geometry": geom,
             "status_geometri": status,
-            "status_validasi": status_validasi
+            "status_validasi": status_validasi,
+            "sumber": properties.get("sumber"),
+            "fitur_sumber": properties.get("fitur_sumber")
         })
 
         total_luas += luas_ha
@@ -824,11 +855,13 @@ def proses_petak_tersier(daftar_petak):
         "data": hasil,
         "total_awal": len(daftar_petak),
         "total_unik": len(petak_unik),
-        "duplikat": duplikat,
+        "duplikat": duplikat_detail,
         "jumlah_berhasil": len(hasil),
         "geometri_gagal": geometri_gagal,
         "total_luas_ha": round(total_luas, 2),
-        "jumlah_anomali": jumlah_anomali
+        "jumlah_anomali": jumlah_anomali,
+        "duplikat_detail": duplikat_detail,
+        "geometri_gagal_detail": geometri_gagal_detail,
     }
 
 def hubungkan_petak_ke_sadap(daftar_petak, daftar_aset, jarak_maksimal=200):
@@ -1122,6 +1155,27 @@ def hitung_prioritas_rehabilitasi(daftar_dampak):
 
     return hasil
 
+def deduplikasi_laporan(daftar_laporan):
+    laporan_unik = {}
+    duplikat = []
+
+    for laporan in daftar_laporan:
+        kunci = (
+            laporan.get("kode_aset"),
+            laporan.get("tanggal"),
+            laporan.get("jenis_kerusakan")
+        )
+
+        if kunci not in laporan_unik:
+            laporan_unik[kunci] = laporan
+        else:
+            duplikat.append({
+                "data": laporan,
+                "duplikat_dari": laporan_unik[kunci].get("id_laporan")
+            })
+
+    return list(laporan_unik.values()), duplikat
+
 def hubungkan_laporan_ke_aset(
     daftar_laporan,
     daftar_aset,
@@ -1207,6 +1261,10 @@ def hubungkan_laporan_ke_aset(
             "kode_aset": (
                 aset_terpilih.get("kode_aset")
                 if aset_terpilih else None
+            ),
+            "status_pencocokan": (
+                "terhubung" if aset_terpilih 
+                else "tidak_terhubung"
             ),
             "metode_pencocokan": metode,
             "status_koordinat_laporan": (

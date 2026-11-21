@@ -4,24 +4,53 @@ import {
   AlertTriangle,
   CheckCircle,
   AlertCircle,
+  Waves,
+  ClipboardList,
+  Ruler,
+  TrendingUp,
 } from "lucide-react";
 
-import { getAset } from "../services/api";
+import {
+  getAset,
+  getRekapSaluran,
+  getPrioritas,
+  getKualitasData,
+} from "../services/api";
+
 import MapIrigasi from "../components/MapIrigasi";
+
+const labelKondisi = {
+  baik: "Baik",
+  rusak_ringan: "Rusak Ringan",
+  rusak_sedang: "Rusak Sedang",
+  rusak_berat: "Rusak Berat",
+};
 
 export default function Dashboard() {
   const [aset, setAset] = useState([]);
+  const [rekapSaluran, setRekapSaluran] = useState(null);
+  const [prioritas, setPrioritas] = useState([]);
+  const [totalTemuan, setTotalTemuan] = useState(0);
+
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
   useEffect(() => {
-    getAset()
-      .then((response) => {
-        setAset(response.data.data || []);
+    Promise.all([
+      getAset(),
+      getRekapSaluran(),
+      getPrioritas(),
+      getKualitasData(),
+    ])
+      .then(([resAset, resSaluran, resPrioritas, resKualitas]) => {
+        setAset(resAset.data.data || []);
+        setRekapSaluran(resSaluran.data);
+        setPrioritas(resPrioritas.data.data || []);
+        setTotalTemuan(resKualitas.data.total_temuan || 0);
       })
       .catch((err) => {
-        console.error("Gagal mengambil data aset:", err);
-        setError("Gagal mengambil data dari server.");
+        console.error("Gagal mengambil ringkasan dashboard:", err);
+        setError("Sebagian data dashboard gagal dimuat.");
       })
       .finally(() => setLoading(false));
   }, []);
@@ -43,16 +72,20 @@ export default function Dashboard() {
       icon: AlertTriangle,
     },
     {
-      title: "Rusak Sedang",
-      value: jumlahKondisi("rusak_sedang"),
-      description: "Memerlukan perbaikan",
-      icon: AlertCircle,
+      title: "Panjang Saluran",
+      value: rekapSaluran
+        ? `${Number(rekapSaluran.total_panjang_km).toLocaleString("id-ID", {
+            maximumFractionDigits: 2,
+          })} km`
+        : "-",
+      description: "Total jaringan saluran",
+      icon: Ruler,
     },
     {
-      title: "Kondisi Baik",
-      value: jumlahKondisi("baik"),
-      description: "Bangunan berfungsi baik",
-      icon: CheckCircle,
+      title: "Temuan Kualitas Data",
+      value: totalTemuan,
+      description: "Data yang perlu ditinjau",
+      icon: ClipboardList,
     },
   ];
 
@@ -66,6 +99,13 @@ export default function Dashboard() {
   const asetRusakBerat = aset.filter(
     (item) => item.kondisi === "rusak_berat"
   );
+
+  const daftarPrioritas = prioritas.slice(0, 5);
+
+  const formatAngka = (nilai) =>
+    Number(nilai || 0).toLocaleString("id-ID", {
+      maximumFractionDigits: 2,
+    });
 
   return (
     <div className="dashboard">
@@ -134,9 +174,7 @@ export default function Dashboard() {
                 {daftarKondisi.map((item) => {
                   const jumlah = jumlahKondisi(item.key);
                   const persen =
-                    aset.length > 0
-                      ? (jumlah / aset.length) * 100
-                      : 0;
+                    aset.length > 0 ? (jumlah / aset.length) * 100 : 0;
 
                   return (
                     <div className="condition-item" key={item.key}>
@@ -181,10 +219,7 @@ export default function Dashboard() {
                 ) : (
                   <div className="damaged-list">
                     {asetRusakBerat.map((item) => (
-                      <div
-                        className="damaged-item"
-                        key={item.kode_aset}
-                      >
+                      <div className="damaged-item" key={item.kode_aset}>
                         <div>
                           <strong>{item.kode_aset}</strong>
                           <span>
@@ -192,9 +227,7 @@ export default function Dashboard() {
                           </span>
                         </div>
 
-                        <span className="damaged-badge">
-                          Rusak Berat
-                        </span>
+                        <span className="damaged-badge">Rusak Berat</span>
                       </div>
                     ))}
                   </div>
@@ -202,6 +235,102 @@ export default function Dashboard() {
               </div>
             </>
           )}
+        </section>
+      </div>
+
+      <div className="dashboard-extra-grid">
+        <section className="content-card">
+          <div className="card-heading">
+            <div>
+              <h3>Rekap Kondisi Saluran</h3>
+              <p>Ringkasan kondisi jaringan irigasi</p>
+            </div>
+            <Waves size={21} />
+          </div>
+
+          {loading || !rekapSaluran ? (
+            <div className="empty-state">Memuat rekap saluran...</div>
+          ) : (
+            <>
+              <div className="canal-summary">
+                <div>
+                  <span>Total Saluran</span>
+                  <strong>{rekapSaluran.total_saluran}</strong>
+                </div>
+                <div>
+                  <span>Geometri Valid</span>
+                  <strong>{rekapSaluran.jumlah_geometri_valid}</strong>
+                </div>
+              </div>
+
+              {["primer", "sekunder"].map((tingkat) => {
+                const data = rekapSaluran.ringkasan?.[tingkat];
+
+                return (
+                  <div className="canal-condition" key={tingkat}>
+                    <h4>Saluran {tingkat === "primer" ? "Primer" : "Sekunder"}</h4>
+
+                    <div className="canal-condition-list">
+                      {daftarKondisi.map((item) => (
+                        <div key={item.key}>
+                          <span>
+                            <i
+                              className="condition-dot"
+                              style={{ backgroundColor: item.color }}
+                            />
+                            {item.label}
+                          </span>
+                          <strong>{data?.kondisi?.[item.key] || 0}</strong>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })}
+            </>
+          )}
+        </section>
+
+        <section className="content-card">
+          <div className="card-heading">
+            <div>
+              <h3>Prioritas Rehabilitasi</h3>
+              <p>Lima aset dengan skor prioritas tertinggi</p>
+            </div>
+            <TrendingUp size={21} />
+          </div>
+
+          {loading ? (
+            <div className="empty-state">Memuat data prioritas...</div>
+          ) : daftarPrioritas.length === 0 ? (
+            <div className="empty-state">Belum ada data prioritas.</div>
+          ) : (
+            <div className="dashboard-priority-list">
+              {daftarPrioritas.map((item, index) => (
+                <div className="dashboard-priority-item" key={item.kode_aset}>
+                  <div className="priority-rank">{index + 1}</div>
+
+                  <div className="priority-info">
+                    <strong>{item.kode_aset}</strong>
+                    <span>
+                      {item.id_ruas || "-"} ·{" "}
+                      {labelKondisi[item.kondisi] || item.kondisi}
+                    </span>
+                  </div>
+
+                  <div className="priority-score">
+                    <strong>{formatAngka(item.skor_prioritas)}</strong>
+                    <span>Skor</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          <div className="dashboard-priority-footer">
+            <span>Total aset dalam prioritas</span>
+            <strong>{loading ? "..." : prioritas.length}</strong>
+          </div>
         </section>
       </div>
     </div>

@@ -219,6 +219,7 @@ def _kunci_kecil(baris):
 
 def bersihkan_aset(path):
     hasil = []
+    nama_sumber = str(path).replace("\\", "/").rsplit("/", 1)[-1]
 
     with open(path, mode='r', encoding='utf-8-sig', newline='') as file:
         reader = csv.DictReader(file)
@@ -236,12 +237,17 @@ def bersihkan_aset(path):
                 'kondisi': normalisasi_kondisi(baris.get('kondisi')),
                 'tahun_bangun': normalisasi_angka(baris.get('tahun_bangun')),
                 'tgl_update': normalisasi_tanggal(baris.get('tgl_update')),
+
+                # Identitas sumber data
+                'sumber': nama_sumber,
+                'baris_sumber': reader.line_num,
+                'x_sumber': baris.get('x'),
+                'y_sumber': baris.get('y')
             }
 
             hasil.append(aset)
 
     return hasil
-
 
 # ==========================================
 # CLEANING DATA LAPORAN
@@ -249,13 +255,17 @@ def bersihkan_aset(path):
 
 def bersihkan_laporan(path):
     hasil = []
+    nama_sumber = str(path).replace("\\", "/").rsplit("/", 1)[-1]
 
     workbook = openpyxl.load_workbook(path, data_only=True)
     sheet = workbook.active
 
     header = [str(cell.value).strip().lower() for cell in sheet[1]]
 
-    for row in sheet.iter_rows(min_row=2, values_only=True):
+    for nomor_baris, row in enumerate(
+        sheet.iter_rows(min_row=2, values_only=True),
+        start=2
+    ):
         baris = dict(zip(header, row))
 
         if all(_kosong(v) for v in row):
@@ -272,13 +282,16 @@ def bersihkan_laporan(path):
             'lon': normalisasi_angka(baris.get('lon')),
             'status': normalisasi_status(baris.get('status')),
             'keterangan': _teks(baris.get('keterangan')),
+
+            # Identitas sumber data
+            'sumber': nama_sumber,
+            'baris_sumber': nomor_baris
         }
 
         hasil.append(laporan)
 
     workbook.close()
     return hasil
-
 
 # ==========================================
 # CLEANING DATA SALURAN
@@ -287,10 +300,13 @@ def bersihkan_laporan(path):
 def bersihkan_saluran(path):
     with open(path, 'r', encoding='utf-8') as file:
         geojson = json.load(file)
+        nama_sumber = str(path).replace("\\", "/").rsplit("/", 1)[-1]
 
     hasil = []
-
-    for feature in geojson.get('features', []):
+    for nomor_fitur, feature in enumerate(
+    geojson.get('features', []),
+    start=1
+    ):
         properties = feature.get('properties') or {}
 
         saluran = {
@@ -299,6 +315,8 @@ def bersihkan_saluran(path):
             'tingkat': normalisasi_tingkat(properties.get('tingkat')),
             'kondisi': normalisasi_kondisi(properties.get('kondisi')),
             'geometry': feature.get('geometry'),
+            'sumber': nama_sumber,
+            'fitur_sumber': nomor_fitur
         }
 
         hasil.append(saluran)
@@ -313,10 +331,11 @@ def bersihkan_saluran(path):
 def bersihkan_petak(path):
     with open(path, 'r', encoding='utf-8') as file:
         geojson = json.load(file)
+        nama_sumber = str(path).replace("\\", "/").rsplit("/", 1)[-1]
 
     hasil = []
 
-    for feature in geojson.get('features', []):
+    for nomor_fitur, feature in enumerate(geojson.get('features', []), start=1):
         properties = feature.get('properties') or {}
 
         luas_baku = normalisasi_angka(
@@ -332,6 +351,8 @@ def bersihkan_petak(path):
                 properties.get('nomenklatur_sadap')
             ),
             'geometry': feature.get('geometry'),
+            'sumber': nama_sumber,
+            'fitur_sumber': nomor_fitur,
         }
 
         hasil.append(petak)

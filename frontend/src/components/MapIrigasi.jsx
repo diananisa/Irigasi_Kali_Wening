@@ -4,17 +4,86 @@ import {
   TileLayer,
   GeoJSON,
   CircleMarker,
+  Marker,
   Popup,
 } from "react-leaflet";
+import L from "leaflet";
 
 import "leaflet/dist/leaflet.css";
 
-import { getAset, getSaluran, getPetak } from "../services/api";
+import {
+  getAset,
+  getSaluran,
+  getPetak,
+  getDampakAset,
+} from "../services/api";
+
+// Warna berdasarkan kondisi fisik
+const warnaKondisi = {
+  baik: "#16a34a",
+  rusak_ringan: "#eab308",
+  rusak_sedang: "#f97316",
+  rusak_berat: "#dc2626",
+};
+
+// Simbol berdasarkan jenis bangunan
+const simbolBangunan = {
+  bendung: "■",
+  bangunan_bagi: "+",
+  bangunan_bagi_sadap: "⊕",
+  bangunan_sadap: "▼",
+  bangunan_pelengkap: "◆",
+};
+
+const labelJenis = {
+  bendung: "Bendung",
+  bangunan_bagi: "Bangunan Bagi",
+  bangunan_bagi_sadap: "Bangunan Bagi Sadap",
+  bangunan_sadap: "Bangunan Sadap",
+  bangunan_pelengkap: "Bangunan Pelengkap",
+};
+
+const labelKondisi = {
+  baik: "Baik",
+  rusak_ringan: "Rusak Ringan",
+  rusak_sedang: "Rusak Sedang",
+  rusak_berat: "Rusak Berat",
+};
+
+// Membuat ikon Leaflet berdasarkan jenis dan kondisi bangunan
+const buatIkonBangunan = (jenis, kondisi) => {
+  const simbol = simbolBangunan[jenis] || "●";
+  const warna = warnaKondisi[kondisi] || "#64748b";
+
+  return L.divIcon({
+    className: "building-map-icon",
+    html: `
+      <div style="
+        width: 25px;
+        height: 25px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: ${warna};
+        font-size: 21px;
+        font-weight: 900;
+        text-shadow:
+          -1px -1px 0 white,
+          1px -1px 0 white,
+          -1px 1px 0 white,
+          1px 1px 0 white;
+      ">${simbol}</div>
+    `,
+    iconSize: [25, 25],
+    iconAnchor: [12, 12],
+  });
+};
 
 export default function MapIrigasi() {
   const [saluran, setSaluran] = useState(null);
   const [petak, setPetak] = useState(null);
   const [aset, setAset] = useState([]);
+  const [dampak, setDampak] = useState({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
@@ -32,6 +101,33 @@ export default function MapIrigasi() {
       .finally(() => setLoading(false));
   }, []);
 
+  const muatDampak = async (kodeAset) => {
+    if (dampak[kodeAset]) return;
+
+    try {
+      const response = await getDampakAset(kodeAset);
+
+      setDampak((sebelumnya) => ({
+        ...sebelumnya,
+        [kodeAset]: response.data,
+      }));
+    } catch (err) {
+      console.error("Gagal mengambil dampak aset:", err);
+    }
+  };
+
+  // Warna garis saluran berdasarkan kondisi
+  const styleSaluran = (feature) => {
+    const kondisi = feature.properties?.kondisi;
+
+    return {
+      color: warnaKondisi[kondisi] || "#64748b",
+      weight: 4,
+      opacity: 0.9,
+    };
+  };
+
+  // Warna petak berdasarkan status anomali
   const stylePetak = (feature) => ({
     color: feature.properties?.anomali ? "#dc2626" : "#65a30d",
     weight: 1,
@@ -39,23 +135,12 @@ export default function MapIrigasi() {
     fillOpacity: 0.18,
   });
 
-  const styleSaluran = (feature) => {
-    const tingkat = feature.properties?.tingkat;
-
-    return {
-      color:
-        tingkat === "primer"
-          ? "#2563eb"
-          : tingkat === "sekunder"
-            ? "#0891b2"
-            : "#0d9488",
-      weight: tingkat === "primer" ? 5 : 3,
-      opacity: 0.9,
-    };
-  };
-
   if (loading) {
-    return <div className="map-placeholder">Memuat peta jaringan irigasi...</div>;
+    return (
+      <div className="map-placeholder">
+        Memuat peta jaringan irigasi...
+      </div>
+    );
   }
 
   if (error) {
@@ -65,10 +150,41 @@ export default function MapIrigasi() {
   return (
     <div className="map-wrapper">
       <div className="map-legend">
-        <span><i className="legend-dot building" /> Bangunan</span>
-        <span><i className="legend-line primary" /> Saluran primer</span>
-        <span><i className="legend-line secondary" /> Saluran sekunder</span>
-        <span><i className="legend-area" /> Petak tersier</span>
+        <span>
+          <i className="legend-line baik" />
+          Saluran Baik
+        </span>
+
+        <span>
+          <i className="legend-line rusak_ringan" />
+          Rusak Ringan
+        </span>
+
+        <span>
+          <i className="legend-line rusak_sedang" />
+          Rusak Sedang
+        </span>
+
+        <span>
+          <i className="legend-line rusak_berat" />
+          Rusak Berat
+        </span>
+
+        <span>
+          <i className="legend-area" />
+          Petak Tersier
+        </span>
+      </div>
+
+      <div className="map-legend">
+        {Object.entries(simbolBangunan).map(([jenis, simbol]) => (
+          <span key={jenis}>
+            <i className={`legend-symbol ${jenis}`}>
+              {simbol}
+            </i>
+            {labelJenis[jenis]}
+          </span>
+        ))}
       </div>
 
       <MapContainer
@@ -82,77 +198,103 @@ export default function MapIrigasi() {
           url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
         />
 
+        {/* Petak tersier */}
         {petak && (
           <GeoJSON
             data={petak}
             style={stylePetak}
             onEachFeature={(feature, layer) => {
-              const p = feature.properties;
-              layer.bindPopup(
-                `<b>Petak ${p.kode_petak || "-"}</b><br/>
-                Luas baku: ${p.luas_baku_ha ?? "-"} ha<br/>
-                Luas geometri: ${p.luas_geometri_ha ?? "-"} ha<br/>
-                Status: ${p.status_validasi || "-"}`
-              );
+              const p = feature.properties || {};
+
+              const popup = document.createElement("div");
+              popup.innerHTML = `
+                <strong>Petak ${p.kode_petak || "-"}</strong>
+                <br/>Luas baku: ${p.luas_baku_ha ?? "-"} ha
+                <br/>Luas geometri: ${p.luas_geometri_ha ?? "-"} ha
+                <br/>Luas dampak: ${p.luas_dampak_ha ?? "-"} ha
+                <br/>Status validasi: ${p.status_validasi || "-"}
+                <br/>Anomali: ${p.anomali ? "Ya" : "Tidak"}
+              `;
+
+              layer.bindPopup(popup);
             }}
           />
         )}
 
+        {/* Saluran irigasi */}
         {saluran && (
           <GeoJSON
             data={saluran}
             style={styleSaluran}
             onEachFeature={(feature, layer) => {
-              const p = feature.properties;
-              layer.bindPopup(
-                `<b>${p.id_ruas || "-"}</b><br/>
-                ${p.nama_saluran || "-"}<br/>
-                Tingkat: ${p.tingkat || "-"}<br/>
-                Kondisi: ${p.kondisi || "-"}`
-              );
+              const p = feature.properties || {};
+
+              layer.bindPopup(`
+                <strong>${p.id_ruas || "-"}</strong>
+                <br/>${p.nama_saluran || "-"}
+                <br/>Tingkat: ${p.tingkat || "-"}
+                <br/>Kondisi: ${labelKondisi[p.kondisi] || p.kondisi || "-"}
+              `);
             }}
           />
         )}
 
+        {/* Bangunan irigasi */}
         {aset.map((item) => {
           if (
             typeof item.x !== "number" ||
-            typeof item.y !== "number"
+            typeof item.y !== "number" ||
+            !Number.isFinite(item.x) ||
+            !Number.isFinite(item.y)
           ) {
             return null;
           }
 
-          const warna = {
-            baik: "#16a34a",
-            rusak_ringan: "#eab308",
-            rusak_sedang: "#f97316",
-            rusak_berat: "#dc2626",
-          };
-
           return (
-            <CircleMarker
+            <Marker
               key={item.kode_aset}
-              center={[item.y, item.x]}
-              radius={6}
-              pathOptions={{
-                color: "#ffffff",
-                weight: 1.5,
-                fillColor: warna[item.kondisi] || "#64748b",
-                fillOpacity: 1,
+              position={[item.y, item.x]}
+              icon={buatIkonBangunan(item.jenis, item.kondisi)}
+              eventHandlers={{
+                click: () => muatDampak(item.kode_aset),
               }}
             >
               <Popup>
-                <strong>{item.kode_aset}</strong>
-                <br />
-                {item.nomenklatur || "-"}
-                <br />
-                Jenis: {item.jenis || "-"}
-                <br />
-                Saluran: {item.nama_saluran || "-"}
-                <br />
-                Kondisi: {item.kondisi || "-"}
+                <div style={{ minWidth: "190px" }}>
+                  <strong>{item.kode_aset}</strong>
+                  <br />
+                  {item.nomenklatur || "-"}
+                  <br />
+                  Jenis: {labelJenis[item.jenis] || item.jenis || "-"}
+                  <br />
+                  Saluran: {item.nama_saluran || "-"}
+                  <br />
+                  Kondisi: {labelKondisi[item.kondisi] || item.kondisi || "-"}
+
+                  <hr />
+
+                  <strong>Dampak Petak Tersier</strong>
+                  <br />
+
+                  {dampak[item.kode_aset]?.dampak ? (
+                    <>
+                      Jumlah petak:{" "}
+                      {dampak[item.kode_aset].dampak.jumlah_petak_terdampak}
+                      <br />
+                      Luas terdampak:{" "}
+                      {Number(
+                        dampak[item.kode_aset].dampak.luas_terdampak_ha || 0
+                      ).toLocaleString("id-ID", {
+                        maximumFractionDigits: 2,
+                      })}{" "}
+                      ha
+                    </>
+                  ) : (
+                    "Memuat informasi dampak..."
+                  )}
+                </div>
               </Popup>
-            </CircleMarker>
+            </Marker>
           );
         })}
       </MapContainer>
